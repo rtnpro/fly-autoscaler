@@ -7,7 +7,7 @@ import (
 	"math"
 	"sort"
 	"sync/atomic"
-
+	"time"
 	"github.com/expr-lang/expr"
 	"github.com/superfly/fly-go"
 )
@@ -48,6 +48,15 @@ type Reconciler struct {
 
 	// Must also be registered in RegisterPromMetrics() for visibility.
 	Stats *ReconcilerStats
+
+	// Scale step size.
+	ScaleStepSize int
+
+	// Scale step interval.
+	ScaleStepInterval time.Duration
+
+	// Last time we scaled up.
+	lastScaleUpTime time.Time
 }
 
 func NewReconciler() *Reconciler {
@@ -118,6 +127,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 	}
 
 	minStartedN, hasMinStartedN, err := r.CalcMinStartedMachineN()
+	slog.Info("minStartedN machine details", slog.Int("minStartedN", minStartedN), slog.Bool("hasMinStartedN", hasMinStartedN))
 	if err != nil {
 		return fmt.Errorf("compute minimum started machine count: %w", err)
 	}
@@ -172,7 +182,31 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 	// Determine if we need to start/stop machines.
 	startedN := len(m[fly.MachineStateStarted])
 	if hasMinStartedN && startedN < minStartedN {
-		return r.startN(ctx, m[fly.MachineStateStopped], minStartedN-startedN)
+		for startedN < minStartedN {
+			toStart := minStartedN - startedN
+			if r.ScaleStepSize > 0 {
+				if time.Since(r.lastScaleUpTime) < r.ScaleStepInterval-time.Second*3 {
+					slog.Info("not enough time has passed since last scale up, skipping",
+						slog.Time("last_scale_up_time", r.lastScaleUpTime),
+						slog.Time("current_time", time.Now()),
+						slog.Duration("scale_step_interval", r.ScaleStepInterval),
+						slog.Duration("time_since_last_scale_up", time.Since(r.lastScaleUpTime)),
+					)
+					break
+				}
+				toStart = min(r.ScaleStepSize, minStartedN-startedN)
+			}
+			if err := r.startN(ctx, m[fly.MachineStateStopped], toStart); err != nil {
+				return err
+			}
+			startedN += toStart
+			r.lastScaleUpTime = time.Now()
+			if r.ScaleStepSize > 0 {
+				// If we're scaling in steps, we don't want to start more machines
+				// than the step size. We'll just try again next time.
+				break
+			}
+		}
 	}
 	if hasMaxStartedN && startedN > maxStartedN {
 		return r.stopN(ctx, m[fly.MachineStateStarted], startedN-maxStartedN)

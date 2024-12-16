@@ -125,6 +125,8 @@ type Config struct {
 	StartedMachineN        string        `yaml:"started-machine-count"`
 	MinStartedMachineN     string        `yaml:"min-started-machine-count"`
 	MaxStartedMachineN     string        `yaml:"max-started-machine-count"`
+	ScaleStepSize          int           `yaml:"scale-step-size"`
+	ScaleStepInterval      time.Duration `yaml:"scale-step-interval"`
 	Concurrency            int           `yaml:"concurrency"`
 	Interval               time.Duration `yaml:"interval"`
 	Timeout                time.Duration `yaml:"timeout"`
@@ -184,6 +186,18 @@ func NewConfigFromEnv() (_ *Config, err error) {
 	if s := os.Getenv("FAS_APP_LIST_REFRESH_INTERVAL"); s != "" {
 		if c.AppListRefreshInterval, err = time.ParseDuration(s); err != nil {
 			return nil, fmt.Errorf("cannot parse FAS_APP_LIST_REFRESH_INTERVAL as duration: %q", s)
+		}
+	}
+
+	if s := os.Getenv("FAS_SCALE_STEP_SIZE"); s != "" {
+		if c.ScaleStepSize, err = strconv.Atoi(s); err != nil {
+			return nil, fmt.Errorf("cannot parse FAS_SCALE_STEP_SIZE as integer: %q", s)
+		}
+	}
+
+	if s := os.Getenv("FAS_SCALE_STEP_INTERVAL"); s != "" {
+		if c.ScaleStepInterval, err = time.ParseDuration(s); err != nil {
+			return nil, fmt.Errorf("cannot parse FAS_SCALE_STEP_INTERVAL as duration: %q", s)
 		}
 	}
 

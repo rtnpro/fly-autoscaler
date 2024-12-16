@@ -373,6 +373,47 @@ func TestReconciler_Scale_Start(t *testing.T) {
 		}
 	})
 
+	t.Run("OK", func(t *testing.T) {
+		var invokeStartN int
+		var client mock.FlapsClient
+		client.ListFunc = func(ctx context.Context, state string) ([]*fly.Machine, error) {
+			return []*fly.Machine{
+				{ID: "1", State: fly.MachineStateStarted, HostStatus: fly.HostStatusOk},
+				{ID: "2", State: fly.MachineStateStopped, HostStatus: fly.HostStatusOk},
+				{ID: "3", State: fly.MachineStateStopped, HostStatus: fly.HostStatusOk},
+				{ID: "4", State: fly.MachineStateStopped, HostStatus: fly.HostStatusOk},
+			}, nil
+		}
+		client.StartFunc = func(ctx context.Context, id, nonce string) (*fly.MachineStartResponse, error) {
+			switch id {
+			case "2", "3":
+				invokeStartN++
+			default:
+				t.Fatalf("unexpected start id: %v", id)
+			}
+			return &fly.MachineStartResponse{}, nil
+		}
+
+		r := fas.NewReconciler()
+		r.Client = &client
+		r.MinStartedMachineN = "foo + 2"
+		r.MaxStartedMachineN = r.MinStartedMachineN
+		r.ScaleStepSize = 1
+		r.SetValue("foo", 1.0)
+		if err := r.Reconcile(context.Background()); err != nil {
+			t.Fatal(err)
+		} else if got, want := invokeStartN, 1; got != want {
+			t.Fatalf("startN=%v, want %v", got, want)
+		}
+		if got, want := r.Stats.BulkStart.Load(), int64(1); got != want {
+			t.Fatalf("BulkStart=%v, want %v", got, want)
+		} else if got, want := r.Stats.MachineStarted.Load(), int64(1); got != want {
+			t.Fatalf("MachineStarted=%v, want %v", got, want)
+		} else if got, want := r.Stats.MachineStartFailed.Load(), int64(0); got != want {
+			t.Fatalf("MachineStartFailed=%v, want %v", got, want)
+		}
+	})
+
 	// Ensure that the reconciler will keep trying to start machines if one fails.
 	t.Run("Failed", func(t *testing.T) {
 		var invokeStartN int
@@ -401,6 +442,7 @@ func TestReconciler_Scale_Start(t *testing.T) {
 		r := fas.NewReconciler()
 		r.Client = &client
 		r.MinStartedMachineN = "2"
+		r.ScaleStepSize = 2
 		r.MaxStartedMachineN = r.MinStartedMachineN
 		if err := r.Reconcile(context.Background()); err != nil {
 			t.Fatal(err)
