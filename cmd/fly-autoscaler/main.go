@@ -125,8 +125,10 @@ type Config struct {
 	StartedMachineN        string        `yaml:"started-machine-count"`
 	MinStartedMachineN     string        `yaml:"min-started-machine-count"`
 	MaxStartedMachineN     string        `yaml:"max-started-machine-count"`
-	ScaleStepSize          int           `yaml:"scale-step-size"`
-	ScaleStepInterval      time.Duration `yaml:"scale-step-interval"`
+	ScaleUpStepSize        int           `yaml:"scale-up-step-size"`
+	ScaleUpStepInterval    time.Duration `yaml:"scale-up-step-interval"`
+	ScaleDownStepSize      int           `yaml:"scale-down-step-size"`
+	ScaleDownStepInterval  time.Duration `yaml:"scale-down-step-interval"`
 	Concurrency            int           `yaml:"concurrency"`
 	Interval               time.Duration `yaml:"interval"`
 	Timeout                time.Duration `yaml:"timeout"`
@@ -189,15 +191,27 @@ func NewConfigFromEnv() (_ *Config, err error) {
 		}
 	}
 
-	if s := os.Getenv("FAS_SCALE_STEP_SIZE"); s != "" {
-		if c.ScaleStepSize, err = strconv.Atoi(s); err != nil {
-			return nil, fmt.Errorf("cannot parse FAS_SCALE_STEP_SIZE as integer: %q", s)
+	if s := os.Getenv("FAS_SCALE_UP_STEP_SIZE"); s != "" {
+		if c.ScaleUpStepSize, err = strconv.Atoi(s); err != nil {
+			return nil, fmt.Errorf("cannot parse FAS_SCALE_UP_STEP_SIZE as integer: %q", s)
 		}
 	}
 
-	if s := os.Getenv("FAS_SCALE_STEP_INTERVAL"); s != "" {
-		if c.ScaleStepInterval, err = time.ParseDuration(s); err != nil {
-			return nil, fmt.Errorf("cannot parse FAS_SCALE_STEP_INTERVAL as duration: %q", s)
+	if s := os.Getenv("FAS_SCALE_UP_STEP_INTERVAL"); s != "" {
+		if c.ScaleUpStepInterval, err = time.ParseDuration(s); err != nil {
+			return nil, fmt.Errorf("cannot parse FAS_SCALE_UP_STEP_INTERVAL as duration: %q", s)
+		}
+	}
+
+	if s := os.Getenv("FAS_SCALE_DOWN_STEP_SIZE"); s != "" {
+		if c.ScaleDownStepSize, err = strconv.Atoi(s); err != nil {
+			return nil, fmt.Errorf("cannot parse FAS_SCALE_DOWN_STEP_SIZE as integer: %q", s)
+		}
+	}
+
+	if s := os.Getenv("FAS_SCALE_DOWN_STEP_INTERVAL"); s != "" {
+		if c.ScaleDownStepInterval, err = time.ParseDuration(s); err != nil {
+			return nil, fmt.Errorf("cannot parse FAS_SCALE_DOWN_STEP_INTERVAL as duration: %q", s)
 		}
 	}
 

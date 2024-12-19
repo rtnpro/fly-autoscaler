@@ -50,13 +50,18 @@ type Reconciler struct {
 	Stats *ReconcilerStats
 
 	// Scale step size.
-	ScaleStepSize int
+	ScaleUpStepSize int
+	ScaleDownStepSize int
 
 	// Scale step interval.
-	ScaleStepInterval time.Duration
+	ScaleUpStepInterval time.Duration
+	ScaleDownStepInterval time.Duration
 
 	// Last time we scaled up.
 	lastScaleUpTime time.Time
+
+	// Last time we scaled down.
+	lastScaleDownTime time.Time
 }
 
 func NewReconciler() *Reconciler {
@@ -184,24 +189,24 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 	if hasMinStartedN && startedN < minStartedN {
 		for startedN < minStartedN {
 			toStart := minStartedN - startedN
-			if r.ScaleStepSize > 0 {
-				if time.Since(r.lastScaleUpTime) < r.ScaleStepInterval-time.Second*3 {
+			if r.ScaleUpStepSize > 0 {
+				if time.Since(r.lastScaleUpTime) < r.ScaleUpStepInterval-time.Second*3 {
 					slog.Info("not enough time has passed since last scale up, skipping",
 						slog.Time("last_scale_up_time", r.lastScaleUpTime),
 						slog.Time("current_time", time.Now()),
-						slog.Duration("scale_step_interval", r.ScaleStepInterval),
+						slog.Duration("scale_up_step_interval", r.ScaleUpStepInterval),
 						slog.Duration("time_since_last_scale_up", time.Since(r.lastScaleUpTime)),
 					)
 					break
 				}
-				toStart = min(r.ScaleStepSize, minStartedN-startedN)
+				toStart = min(r.ScaleUpStepSize, minStartedN-startedN)
 			}
 			if err := r.startN(ctx, m[fly.MachineStateStopped], toStart); err != nil {
 				return err
 			}
 			startedN += toStart
 			r.lastScaleUpTime = time.Now()
-			if r.ScaleStepSize > 0 {
+			if r.ScaleUpStepSize > 0 {
 				// If we're scaling in steps, we don't want to start more machines
 				// than the step size. We'll just try again next time.
 				break
@@ -209,7 +214,21 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		}
 	}
 	if hasMaxStartedN && startedN > maxStartedN {
-		return r.stopN(ctx, m[fly.MachineStateStarted], startedN-maxStartedN)
+		toStop := startedN - maxStartedN
+		if r.ScaleDownStepSize > 0 {
+			if time.Since(r.lastScaleDownTime) < r.ScaleDownStepInterval-time.Second*3 {
+				slog.Info("not enough time has passed since last scale down, skipping",
+					slog.Time("last_scale_down_time", r.lastScaleDownTime),
+					slog.Time("current_time", time.Now()),
+					slog.Duration("scale_down_step_interval", r.ScaleDownStepInterval),
+					slog.Duration("time_since_last_scale_down", time.Since(r.lastScaleDownTime)),
+				)
+				return nil
+			}
+			r.lastScaleDownTime = time.Now()
+			toStop = min(r.ScaleDownStepSize, startedN-maxStartedN)
+		}
+		return r.stopN(ctx, m[fly.MachineStateStarted], toStop)
 	}
 
 	r.Stats.NoScale.Add(1)

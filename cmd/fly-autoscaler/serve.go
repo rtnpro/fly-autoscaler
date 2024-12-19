@@ -78,8 +78,10 @@ func (c *ServeCommand) Run(ctx context.Context, args []string) (err error) {
 		r.InitialMachineState = c.Config.InitialMachineState
 		r.Regions = c.Config.Regions
 		r.Collectors = collectors
-		r.ScaleStepSize = c.Config.ScaleStepSize
-		r.ScaleStepInterval = c.Config.ScaleStepInterval
+		r.ScaleUpStepSize = c.Config.ScaleUpStepSize
+		r.ScaleUpStepInterval = c.Config.ScaleUpStepInterval
+		r.ScaleDownStepSize = c.Config.ScaleDownStepSize
+		r.ScaleDownStepInterval = c.Config.ScaleDownStepInterval
 		return r
 	}
 	p.AppName = c.Config.AppName
