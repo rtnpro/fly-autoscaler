@@ -129,23 +129,25 @@ type Config struct {
 	ScaleUpStepInterval    time.Duration `yaml:"scale-up-step-interval"`
 	ScaleDownStepSize      int           `yaml:"scale-down-step-size"`
 	ScaleDownStepInterval  time.Duration `yaml:"scale-down-step-interval"`
+	BackPressureCoolDown   time.Duration `yaml:"back-pressure-cool-down"`
 	Concurrency            int           `yaml:"concurrency"`
 	Interval               time.Duration `yaml:"interval"`
 	Timeout                time.Duration `yaml:"timeout"`
 	AppListRefreshInterval time.Duration `yaml:"app-list-refresh-interval"`
 	APIToken               string        `yaml:"api-token"`
 	Verbose                bool          `yaml:"verbose"`
+	ScaleBackoffValue      string        `yaml:"scale-backoff-value"`
 
 	MetricCollectors []*MetricCollectorConfig `yaml:"metric-collectors"`
 }
 
 func NewConfig() *Config {
 	return &Config{
-		Concurrency:            fas.DefaultConcurrency,
-		Interval:               fas.DefaultReconcileInterval,
-		Timeout:                fas.DefaultReconcileTimeout,
-		AppListRefreshInterval: fas.DefaultAppListRefreshInterval,
-	}
+			Concurrency:            fas.DefaultConcurrency,
+			Interval:               fas.DefaultReconcileInterval,
+			Timeout:                fas.DefaultReconcileTimeout,
+			AppListRefreshInterval: fas.DefaultAppListRefreshInterval,
+		}
 }
 
 func NewConfigFromEnv() (_ *Config, err error) {
@@ -159,6 +161,7 @@ func NewConfigFromEnv() (_ *Config, err error) {
 	c.StartedMachineN = os.Getenv("FAS_STARTED_MACHINE_COUNT")
 	c.MinStartedMachineN = os.Getenv("FAS_MIN_STARTED_MACHINE_COUNT")
 	c.MaxStartedMachineN = os.Getenv("FAS_MAX_STARTED_MACHINE_COUNT")
+	c.ScaleBackoffValue = os.Getenv("FAS_SCALE_BACKOFF_VALUE")
 	c.APIToken = os.Getenv("FAS_API_TOKEN")
 
 	if s := os.Getenv("FAS_REGIONS"); s != "" {
@@ -188,6 +191,12 @@ func NewConfigFromEnv() (_ *Config, err error) {
 	if s := os.Getenv("FAS_APP_LIST_REFRESH_INTERVAL"); s != "" {
 		if c.AppListRefreshInterval, err = time.ParseDuration(s); err != nil {
 			return nil, fmt.Errorf("cannot parse FAS_APP_LIST_REFRESH_INTERVAL as duration: %q", s)
+		}
+	}
+
+	if s := os.Getenv("FAS_BACKPRESSURE_COOL_DOWN"); s != "" {
+		if c.BackPressureCoolDown, err = time.ParseDuration(s); err != nil {
+			return nil, fmt.Errorf("cannot parse FAS_BACKPRESSURE_COOL_DOWN as duration: %q", s)
 		}
 	}
 
@@ -221,6 +230,13 @@ func NewConfigFromEnv() (_ *Config, err error) {
 			Address:    addr,
 			MetricName: os.Getenv("FAS_PROMETHEUS_METRIC_NAME"),
 			Query:      os.Getenv("FAS_PROMETHEUS_QUERY"),
+			Token:      os.Getenv("FAS_PROMETHEUS_TOKEN"),
+		})
+		c.MetricCollectors = append(c.MetricCollectors, &MetricCollectorConfig{
+			Type:       "prometheus",
+			Address:    addr,
+			MetricName: os.Getenv("FAS_PROMETHEUS_SCALE_BACKOFF_METRIC_NAME"),
+			Query:      os.Getenv("FAS_PROMETHEUS_SCALE_BACKOFF_QUERY"),
 			Token:      os.Getenv("FAS_PROMETHEUS_TOKEN"),
 		})
 	}
@@ -284,6 +300,13 @@ func (c *Config) GetMaxStartedMachineN() string {
 		return v
 	}
 	return c.MaxStartedMachineN
+}
+
+func (c *Config) GetScaleBackoffValue() string {
+	if v := c.ScaleBackoffValue; v != "" {
+		return v
+	}
+	return c.ScaleBackoffValue
 }
 
 func (c *Config) Validate() error {

@@ -3,13 +3,13 @@ package fas
 import (
 	"context"
 	"fmt"
+	"github.com/expr-lang/expr"
+	"github.com/superfly/fly-go"
 	"log/slog"
 	"math"
 	"sort"
 	"sync/atomic"
 	"time"
-	"github.com/expr-lang/expr"
-	"github.com/superfly/fly-go"
 )
 
 // Reconciler represents the central part of the autoscaler that stores metrics,
@@ -50,11 +50,11 @@ type Reconciler struct {
 	Stats *ReconcilerStats
 
 	// Scale step size.
-	ScaleUpStepSize int
+	ScaleUpStepSize   int
 	ScaleDownStepSize int
 
 	// Scale step interval.
-	ScaleUpStepInterval time.Duration
+	ScaleUpStepInterval   time.Duration
 	ScaleDownStepInterval time.Duration
 
 	// Last time we scaled up.
@@ -62,6 +62,9 @@ type Reconciler struct {
 
 	// Last time we scaled down.
 	lastScaleDownTime time.Time
+
+	// Scale backoff value.
+	ScaleBackoffValue string
 }
 
 func NewReconciler() *Reconciler {
@@ -140,6 +143,10 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("compute minimum started machine count: %w", err)
 	}
+	scaleBackoffValue, hasScaleBackoffValue, err := r.CalcScaleBackoffValue()
+	if err != nil {
+		return fmt.Errorf("compute scale backoff value: %w", err)
+	}
 
 	// Fetch list of running machines.
 	all, err := r.listMachines(ctx)
@@ -166,7 +173,14 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 				slog.Int("max", maxStartedN),
 			),
 		),
+		slog.Bool("hasScaleBackoffValue", hasScaleBackoffValue),
+		slog.Int("scaleBackoffValue", scaleBackoffValue),
 	)
+
+	if scaleBackoffValue > 0 {
+		slog.Info("scale backoff value is greater than 0, skipping scale up")
+		return nil
+	}
 
 	// Determine if we need to create or destroy machines.
 	createdN := len(machines)
@@ -479,6 +493,11 @@ func (r *Reconciler) CalcMinStartedMachineN() (int, bool, error) {
 // CalcMaxStartedMachineN returns the maximum number of started machines.
 func (r *Reconciler) CalcMaxStartedMachineN() (int, bool, error) {
 	return r.evalInt(r.MaxStartedMachineN)
+}
+
+// CalcScaleBackoffValue returns the value of the scale backoff.
+func (r *Reconciler) CalcScaleBackoffValue() (int, bool, error) {
+	return r.evalInt(r.ScaleBackoffValue)
 }
 
 // evalInt compiles & runs an expression. Returns a rounded integer.

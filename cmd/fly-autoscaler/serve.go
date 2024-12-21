@@ -82,6 +82,7 @@ func (c *ServeCommand) Run(ctx context.Context, args []string) (err error) {
 		r.ScaleUpStepInterval = c.Config.ScaleUpStepInterval
 		r.ScaleDownStepSize = c.Config.ScaleDownStepSize
 		r.ScaleDownStepInterval = c.Config.ScaleDownStepInterval
+		r.ScaleBackoffValue = c.Config.ScaleBackoffValue
 		return r
 	}
 	p.AppName = c.Config.AppName

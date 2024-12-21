@@ -39,6 +39,7 @@ func (c *EvalCommand) Run(ctx context.Context, args []string) (err error) {
 	r.MaxCreatedMachineN = c.Config.GetMaxCreatedMachineN()
 	r.MinStartedMachineN = c.Config.GetMinStartedMachineN()
 	r.MaxStartedMachineN = c.Config.GetMaxStartedMachineN()
+	r.ScaleBackoffValue = c.Config.GetScaleBackoffValue()
 	r.Collectors = collectors
 
 	if err := r.CollectMetrics(ctx); err != nil {
